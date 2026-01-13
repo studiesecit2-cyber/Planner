@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>📆 Planner Mensal Interativo – Ingrid</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #3b82f6;
+      --accent: #10b981;
+      --danger: #ef4444;
+      --border: #e5e7eb;
+      --shadow: 0 10px 25px rgba(0,0,0,0.08);
+    }
+    [data-theme="dark"] {
+      --bg: #0f172a;
+      --card: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --primary: #60a5fa;
+      --accent: #34d399;
+      --danger: #f87171;
+      --border: #1f2937;
+      --shadow: 0 10px 25px rgba(0,0,0,0.35);
+    }
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, system-ui, -apple-system, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    header {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+      margin: 24px auto 0;
+      max-width: 1100px;
+    }
+    .title { font-size: 1.6rem; font-weight: 800; }
+    .subtitle { color: var(--muted); margin-top: 6px; }
+    .controls { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+    select, button {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+    }
+    button.primary { background: var(--primary); color: #fff; border: none; }
+    .container { max-width: 1100px; margin: 20px auto 60px; padding: 0 20px; }
+    .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; }
+    .weekday { text-align: center; font-weight: 700; color: var(--muted); }
+    .day {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      min-height: 120px;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .day-number { font-weight: 800; color: var(--primary); }
+    .summary { color: var(--muted); font-size: 0.92rem; white-space: pre-line; }
+    .scenario-1 { border-left: 4px solid var(--accent); }
+    .scenario-2 { border-left: 4px solid var(--primary); }
+    .today { box-shadow: 0 0 0 2px var(--accent) inset; }
+    .modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5); justify-content: center; align-items: center;
+    }
+    .modal-content {
+      background: var(--card); border-radius: 16px; padding: 20px; max-width: 560px;
+    }
+    .modal-content input, .modal-content textarea {
+      width: 100%; padding: 10px; margin-top: 6px; border: 1px solid var(--border);
+      border-radius: 10px; background: var(--card); color: var(--text);
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+    @media print { #exportButtons { display: none; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">📆 Planner mensal interativo — Ingrid</div>
+    <div class="subtitle">Cenários: 1️⃣ Até 04/02 (sem aulas) | 2️⃣ A partir de 05/02 (escola técnica)</div>
+    <div class="controls" id="exportButtons">
+      <select id="monthSelect">
+        <option value="1" selected>Fevereiro</option>
+      </select>
+      <button id="toggleTheme" class="primary">Alternar tema</button>
+      <button id="exportICS">Exportar Google Calendar (.ics)</button>
+      <button id="exportPDF" class="primary">Exportar PDF</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="calendar" id="calendar">
+      <div class="weekday">Dom</div><div class="weekday">Seg</div><div class="weekday">Ter</div>
+      <div class="weekday">Qua</div><div class="weekday">Qui</div><div class="weekday">Sex</div><div class="weekday">Sáb</div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="modal-content">
+      <h2>Editar atividades — <span id="modalDate"></span></h2>
+      <input id="time" type="text" placeholder="Horários (ex: 07:00–18:00)" />
+      <textarea id="activity" rows="5" placeholder="Atividades do dia..."></textarea>
+      <div class="modal-actions">
+        <button id="closeModal">Cancelar</button>
+        <button id="saveDay" class="primary">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const calendarEl = document.getElementById('calendar');
+    const modal = document.getElementById('modal');
+    const modalDate = document.getElementById('modalDate');
+    const timeInput = document.getElementById('time');
+    const activityInput = document.getElementById('activity');
+    const saveBtn = document.getElementById('saveDay');
+    const closeBtn = document.getElementById('closeModal');
+    const exportICSBtn = document.getElementById('exportICS');
+    const exportPDFBtn = document.getElementById('exportPDF');
+    const toggleThemeBtn = document.getElementById('toggleTheme');
+
+    const year = new Date().getFullYear();
+    const month = 1; // Fevereiro
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+
+    function buildCalendar() {
+      calendarEl.querySelectorAll('.day').forEach(d => d.remove());
+      const startWeekday = new Date(year, month, 1).getDay();
+      for (let i=0;i<startWeekday;i++) {
+        const blank=document.createElement('div'); blank.className='day'; blank.style.visibility='hidden';
+        calendarEl.appendChild(blank);
+      }
+      for (let d=1; d<=daysInMonth; d++) {
+        const dayEl=document.createElement('div'); dayEl.className='day';
+        if (d<=4) dayEl.classList.add('scenario-1'); else dayEl.classList.add('scenario-2');
+        dayEl.innerHTML=`<div class="day-number">${d}</div><div id="summary-${d}" class="summary"></div>`;
+        dayEl.onclick=()=>openModal(d);
+        calendarEl.appendChild(dayEl);
+        const saved=JSON.parse(localStorage.getItem(`planner-${year}-${month}-${d}`)||'{}');
+        if(saved.time||saved.activity) document.getElementById(`summary-${d}`).innerText=`${saved.time} — ${saved.activity}`;
+      }
+    }
+
+    function openModal(day) {
+      modal.style.display='flex';
+      modalDate.textContent=`${String(day).padStart(2,'0')}/02/${year}`;
+      const saved=JSON.parse(localStorage.getItem(`planner-${year}-${month}-${day}`)||'{}');
+      timeInput.value=saved.time||''; activityInput.value=saved.activity||'';
+      saveBtn.onclick=()=>{
